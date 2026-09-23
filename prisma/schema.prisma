@@ -1,0 +1,892 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  phone             String?   @unique
+  passwordHash      String?
+  passkeyEnabled    Boolean   @default(false)
+  passkeyChallenge  String?
+  passkeyCredentials Json?
+  twoFactorSecret   String?
+  twoFactorBackupCodes String?
+  emailVerified    Boolean   @default(false)
+  otpCode          String?
+  otpExpiresAt     DateTime?
+  phoneVerified    Boolean   @default(false)
+  phoneOtpCode     String?
+  phoneOtpExpiresAt DateTime?
+  phoneOtpAttempts Int       @default(0)
+  fullName          String?
+  country           String?
+  avatarUrl         String?
+  kycStatus         KycStatus @default(PENDING)
+  idFrontUrl        String?
+  idBackUrl         String?
+  selfieUrl         String?
+  kycSubmittedAt    DateTime?
+  kycReviewedAt     DateTime?
+  kycRejectReason   String?
+  role              Role      @default(USER)
+  accountFrozen     Boolean   @default(false)
+  isFeatured        Boolean   @default(false)
+  freezeReason      String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  accounts          Account[]
+  tradingAccounts   TradingAccount[]
+  trades            Trade[]
+  deposits          Deposit[]
+  withdrawals       Withdrawal[]
+  subscription      Subscription?
+  copyFollows       CopyRelationship[] @relation("CopyFollower")
+  copyLeads         CopyRelationship[] @relation("CopyLeader")
+  alerts            Alert[]
+  streak            Streak?
+  userMissions      UserMission[]
+  userBadges        UserBadge[]
+  xpLogs            XpLog[]
+  journalEntries    JournalEntry[]
+  securityEvents    SecurityEvent[]
+  pushTokens        PushToken[]
+  referralsGiven    Referral[] @relation("Referrer")
+  referralsReceived Referral[] @relation("Referee")
+  aiChats           AiChat[]
+  presenceSessions  PresenceSession[]
+  notifications     Notification[]
+  tradeIdeas        TradeIdea[]
+  tradeIdeaLikes    TradeIdeaLike[]
+  tradeIdeaComments TradeIdeaComment[]
+  withdrawalAddresses WithdrawalAddress[]
+  aiUsage       AiUsage[]
+  aiRiskProfile AiRiskProfile?
+  challengeEntries    ChallengeParticipant[]
+  signals             Signal[]
+  watchlists          Watchlist[]
+  educationProgress   EducationProgress[]
+  mt5Accounts         Mt5Account[]
+  apiKeys             UserApiKey[]
+  kycSubmission       KYCSubmission?
+
+  @@index([email])
+  @@index([phone])
+}
+
+model KYCSubmission {
+  id          String       @id @default(cuid())
+  userId      String       @unique
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status      KycStatus    @default(PENDING)
+  idFrontUrl  String?
+  idBackUrl   String?
+  selfieUrl   String?
+  submittedAt DateTime     @default(now())
+  reviewedAt  DateTime?
+  reviewedBy  String?
+  reason      String?
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model TradingAccount {
+  id                String      @id @default(cuid())
+  userId            String
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              AccountType @default(DEMO)
+  tier              Tier        @default(STANDARD)
+  balance           Decimal     @db.Decimal(18, 8)
+  currency          String      @default("USD")
+  leverage          Int         @default(30)
+  isIslamic         Boolean     @default(false)
+  isActive          Boolean     @default(true)
+  isTradingEnabled  Boolean     @default(true)
+  isDefault         Boolean     @default(false)
+  lastDemoResetAt   DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  trades            Trade[]
+
+  @@index([userId])
+  @@index([userId, type])
+}
+
+model Trade {
+  id          String       @id @default(cuid())
+  accountId   String
+  account     TradingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol      String
+  side        TradeSide
+  volume      Decimal      @db.Decimal(18, 8)
+  orderType   OrderType    @default(MARKET)
+  triggerPrice Decimal?    @db.Decimal(18, 8)
+  openPrice   Decimal      @db.Decimal(18, 8)
+  closePrice  Decimal?     @db.Decimal(18, 8)
+  stopLoss    Decimal?     @db.Decimal(18, 8)
+  takeProfit  Decimal?     @db.Decimal(18, 8)
+  isGuaranteedStop Boolean @default(false)
+  trailingStopDistance Decimal? @db.Decimal(18, 8)
+  ocoGroupId  String?
+  profit      Decimal      @default(0) @db.Decimal(18, 8)
+  status      TradeStatus  @default(OPEN)
+  openedAt    DateTime     @default(now())
+  closedAt    DateTime?
+  idempotencyKey String?    @unique
+  copySourceId String?
+  engineOrderId String?
+  routingDecision String?
+  hedgedAt DateTime?
+
+  journalEntries JournalEntry[]
+  engineOrders EngineOrder[]
+
+  @@index([accountId])
+  @@index([userId])
+  @@index([symbol])
+  @@index([status])
+  @@index([openedAt])
+  @@index([ocoGroupId])
+  @@index([engineOrderId])
+}
+
+model EngineOrder {
+  id          String       @id @default(cuid())
+  tradeId     String
+  trade       Trade        @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  engineOrderId String     @unique
+  symbol      String
+  side        TradeSide
+  orderType   OrderType
+  price       Decimal?     @db.Decimal(18, 8)
+  quantity    Decimal      @db.Decimal(18, 8)
+  status      String       @default("PENDING")  // PENDING, FILLED, CANCELLED, CLOSED
+  filledPrice Decimal?     @db.Decimal(18, 8)
+  routingDecision String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([engineOrderId])
+  @@index([tradeId])
+  @@index([symbol])
+  @@index([status])
+}
+
+model BrokerExposure {
+  id          String   @id @default(cuid())
+  symbol      String   @unique
+  netVolume   Decimal  @db.Decimal(18, 8)  // positive = net long, negative = net short
+  netDirection String  @default("FLAT")    // LONG, SHORT, FLAT
+  updatedAt   DateTime @updatedAt
+}
+
+model HedgeEvent {
+  id            String   @id @default(cuid())
+  symbol        String
+  volume        Decimal  @db.Decimal(18, 8)
+  direction     String   // LONG, SHORT
+  reason        String   // EXPOSURE_CAP, CONSISTENT_WINNER, LARGE_TRADE, MANUAL
+  hedgedAt      DateTime @default(now())
+  providerTicket String?
+
+  @@index([symbol])
+  @@index([hedgedAt])
+  @@index([reason])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  userId    String?
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  @@index([action])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Deposit {
+  id                String         @id @default(cuid())
+  userId            String
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount            Decimal        @db.Decimal(18, 8)
+  method            DepositMethod
+  status            DepositStatus  @default(PENDING)
+  reference         String?        @unique
+  proofUrl          String?
+  cryptoAddress     String?
+  cryptoCurrency    String?
+  txHash            String?
+  confirmedAt       DateTime?
+  confirmedBy       String?
+  binancePrepayId   String?
+  binanceOrderId    String?
+  wireInstruction   WireInstruction?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([reference])
+  @@index([binancePrepayId])
+}
+
+model Withdrawal {
+  id              String             @id @default(cuid())
+  userId          String
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount          Decimal            @db.Decimal(18, 8)
+  method          WithdrawalMethod
+  accountDetails  Json
+  status          WithdrawalStatus   @default(PENDING)
+  adminNote       String?
+  confirmationToken String?
+  confirmationExpires DateTime?
+  confirmedAt     DateTime?
+  txHash          String?
+  processedAt     DateTime?
+  processedBy     String?
+  binancePayId    String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([confirmationToken])
+}
+
+model WithdrawalAddress {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  method    String
+  address   String
+  label     String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, method, address])
+  @@index([userId])
+}
+
+model WireInstruction {
+  id            String   @id @default(cuid())
+  depositId     String   @unique
+  deposit       Deposit  @relation(fields: [depositId], references: [id], onDelete: Cascade)
+  reference     String   @unique
+  amountUsd     Decimal  @db.Decimal(18, 8)
+  bankName      String
+  accountNumber String
+  swift         String?
+  iban          String?
+  createdAt     DateTime @default(now())
+
+  @@index([depositId])
+  @@index([reference])
+}
+
+model LpConfig {
+  id              String    @id @default(cuid())
+  provider        String    @default("STUB")
+  apiKeyEncrypted String?
+  apiUrl          String?
+  lpAccountId     String?
+  enabled         Boolean   @default(false)
+  updatedAt       DateTime  @updatedAt
+}
+
+model Signal {
+  id          String     @id @default(cuid())
+  symbol      String
+  direction   TradeSide
+  entryPrice  Decimal    @db.Decimal(18, 8)
+  stopLoss    Decimal    @db.Decimal(18, 8)
+  takeProfit  Decimal    @db.Decimal(18, 8)
+  confidence  Int        @default(50)
+  analysis    String
+  status      String     @default("active")
+  analystId   String?
+  analyst     User?      @relation(fields: [analystId], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+
+  @@index([symbol])
+  @@index([status])
+  @@index([confidence])
+}
+
+model Challenge {
+  id          String             @id @default(cuid())
+  title       String
+  description String
+  type        ChallengeType      @default(PROFIT)
+  prize       String
+  startsAt    DateTime
+  endsAt      DateTime
+  status      ChallengeStatus    @default(UPCOMING)
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+
+  participants ChallengeParticipant[]
+
+  @@index([status])
+  @@index([startsAt, endsAt])
+}
+
+model ChallengeParticipant {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  score       Float     @default(0)
+  rank        Int?
+  joinedAt    DateTime  @default(now())
+
+  @@unique([userId, challengeId])
+  @@index([challengeId, score])
+}
+
+model Subscription {
+  id                String           @id @default(cuid())
+  userId            String           @unique
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan              SubscriptionPlan @default(FREE)
+  status            SubscriptionStatus @default(ACTIVE)
+  currentPeriodEnd  DateTime
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([status])
+}
+
+model CopyRelationship {
+  id            String   @id @default(cuid())
+  followerId    String
+  follower      User     @relation("CopyFollower", fields: [followerId], references: [id], onDelete: Cascade)
+  leaderId      String
+  leader        User     @relation("CopyLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+  allocationPct Int
+  riskLevel     RiskLevel @default(MEDIUM)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([followerId, leaderId])
+  @@index([followerId])
+  @@index([leaderId])
+  @@index([isActive])
+}
+
+model Alert {
+  id           String       @id @default(cuid())
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol       String
+  condition    AlertCondition
+  targetPrice  Decimal      @db.Decimal(18, 8)
+  isTriggered  Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  triggeredAt  DateTime?
+
+  @@index([userId])
+  @@index([symbol, isTriggered])
+}
+
+model Streak {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  current       Int      @default(0)
+  longest       Int      @default(0)
+  lastActiveDate DateTime?
+  freezes       Int      @default(2)
+  updatedAt     DateTime @updatedAt
+}
+
+model Mission {
+  id           String   @id @default(cuid())
+  title        String
+  description  String
+  xpReward     Int
+  expiresDaily Boolean  @default(true)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  userMissions UserMission[]
+}
+
+model UserMission {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  missionId   String
+  mission     Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  progress    Int      @default(0)
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, missionId])
+  @@index([userId])
+}
+
+model Badge {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  icon        String
+  criteria    String
+  createdAt   DateTime @default(now())
+
+  userBadges  UserBadge[]
+}
+
+model UserBadge {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badgeId   String
+  badge     Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  earnedAt  DateTime @default(now())
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+}
+
+model XpLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  points    Int
+  source    String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model JournalEntry {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tradeId     String?
+  trade       Trade?        @relation(fields: [tradeId], references: [id], onDelete: SetNull)
+  mood        JournalMood
+  note        String?
+  aiInsight   String?
+  createdAt   DateTime      @default(now())
+
+  @@index([userId])
+  @@index([tradeId])
+  @@index([createdAt])
+}
+
+model SentimentCache {
+  id          String   @id @default(cuid())
+  symbol      String
+  score       Int
+  sourceCount Int
+  computedAt  DateTime @default(now())
+
+  @@unique([symbol])
+  @@index([symbol])
+}
+
+model SecurityEvent {
+  id              String   @id @default(cuid())
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  event           String
+  ip              String?
+  deviceFingerprint String?
+  country         String?
+  riskScore       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([event])
+  @@index([createdAt])
+  @@index([riskScore])
+}
+
+model PushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String   @default("mobile")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Referral {
+  id          String        @id @default(cuid())
+  referrerId  String
+  referrer    User          @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  refereeId   String
+  referee     User          @relation("Referee", fields: [refereeId], references: [id], onDelete: Cascade)
+  bonusUsd    Decimal       @default(10) @db.Decimal(18, 2)
+  status      ReferralStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+  paidAt      DateTime?
+
+  @@unique([refereeId])
+  @@index([referrerId])
+  @@index([status])
+}
+
+model TradeIdea {
+  id             String       @id @default(cuid())
+  authorId       String
+  author         User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  symbol         String
+  direction      TradeSide
+  note           String
+  chartSnapshot  String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  likes          TradeIdeaLike[]
+  comments       TradeIdeaComment[]
+
+  @@index([authorId])
+  @@index([symbol])
+  @@index([createdAt])
+}
+
+model TradeIdeaLike {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ideaId    String
+  idea      TradeIdea   @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@unique([userId, ideaId])
+  @@index([userId])
+  @@index([ideaId])
+}
+
+model TradeIdeaComment {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ideaId    String
+  idea      TradeIdea   @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime    @default(now())
+
+  @@index([userId])
+  @@index([ideaId])
+  @@index([createdAt])
+}
+
+model AiChat {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      ChatRole
+  content   String
+  createdAt DateTime    @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model PresenceSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chartSymbol String
+  socketId  String
+  lastSeen  DateTime @default(now())
+
+  @@index([userId])
+  @@index([chartSymbol])
+  @@index([socketId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  data      Json?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+model UserApiKey {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider    String   // openai | groq | nvidia | anthropic | openrouter | gemini | deepseek | mistral | together | fireworks | xai | perplexity | cerebras | custom
+  encryptedKey String  // AES-256-GCM encrypted
+  keyHint     String   // last 4 chars for display
+  baseUrl     String?  // custom OpenAI-compatible endpoint URL
+  model       String?  // model name for this provider
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, provider])
+  @@index([userId])
+}
+
+model Watchlist {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String   @default("Default")
+  symbols   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Mt5Account {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  metaapiId     String   @unique
+  login         String
+  server        String
+  brokerName    String
+  accountType   String   @default("real")
+  currency      String   @default("USD")
+  balance       Float    @default(0)
+  equity        Float    @default(0)
+  isActive      Boolean  @default(true)
+  lastSyncedAt  DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+model EducationCourse {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  category    String
+  difficulty  String   @default("beginner")
+  duration    String
+  content     String
+  quizJson    Json?
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  progress    EducationProgress[]
+}
+
+model EducationProgress {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId   String
+  course     EducationCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  completed  Boolean  @default(false)
+  quizScore  Int?
+  completedAt DateTime?
+
+  @@unique([userId, courseId])
+  @@index([userId])
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum ChallengeType {
+  PROFIT
+  WINRATE
+  CONSISTENCY
+}
+
+enum ChallengeStatus {
+  UPCOMING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum AccountType {
+  DEMO
+  LIVE
+}
+
+enum Tier {
+  STANDARD
+  RAW
+  ECN
+}
+
+enum TradeSide {
+  BUY
+  SELL
+}
+
+enum TradeStatus {
+  OPEN
+  CLOSED
+  PENDING
+  CANCELLED
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+  STOP
+  STOP_LIMIT
+  OCO
+}
+
+enum DepositMethod {
+  BINANCE_PAY
+  CRYPTO
+  WIRE
+  CARD
+  BANK
+}
+
+enum DepositStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  FAILED
+}
+
+enum WithdrawalMethod {
+  BINANCE_PAY
+  CRYPTO
+  WIRE
+  CARD
+  BANK
+}
+
+enum WithdrawalStatus {
+  PENDING
+  ADMIN_REVIEW
+  PAID
+  REJECTED
+}
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+  ELITE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  PAST_DUE
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum AlertCondition {
+  ABOVE
+  BELOW
+  CROSSES
+}
+
+enum JournalMood {
+  CALM
+  ANXIOUS
+  CONFIDENT
+  FOMO
+}
+
+enum ReferralStatus {
+  PENDING
+  QUALIFIED
+  PAID
+  EXPIRED
+}
+
+model AiUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId])
+}
+
+model AiRiskProfile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profitabilityScore Int      @default(50)
+  revengeFlag        Boolean  @default(false)
+  anomalyFlag        Boolean  @default(false)
+  recommendedRoute   String?  // A_BOOK | B_BOOK | C_BOOK
+  reason             String?
+  updatedAt          DateTime @updatedAt
+
+  @@index([userId])
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+}
