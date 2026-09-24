@@ -1,0 +1,27 @@
+﻿services:
+  - type: web
+    name: loopader-engine
+    env: docker
+    dockerfilePath: ./engine/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: loopader-db
+  
+  - type: web
+    name: loopader-orchestrator
+    env: python
+    buildCommand: pip install -r engine/orchestrator/requirements.txt
+    startCommand: python engine/orchestrator/main.py
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: loopader-db
+      - key: ENGINE_SERVICE_URL
+        value: https://loopader-engine.onrender.com
+      - key: AI_RISK_API_URL
+        value: https://loopader.vercel.app
+
+databases:
+  - name: loopader-db
+    plan: free
