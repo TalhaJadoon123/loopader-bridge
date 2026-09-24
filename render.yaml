@@ -1,4 +1,8 @@
-﻿services:
+﻿databases:
+  - name: loopader-db
+    plan: free
+
+services:
   - type: web
     name: loopader-engine
     env: docker
@@ -25,7 +29,3 @@
         value: https://loopader-engine.onrender.com
       - key: AI_RISK_API_URL
         value: https://loopader.vercel.app
-
-databases:
-  - name: loopader-db
-    plan: free
