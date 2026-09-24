@@ -1,0 +1,114 @@
+name: Deploy to Vercel & Render
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  # 1. Run tests & typecheck
+  test:
+    name: Test & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_APP_URL: https://loopader.vercel.app
+          NEXTAUTH_URL: https://loopader.vercel.app
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          ADMIN_PASSWORD_HASH: ${{ secrets.ADMIN_PASSWORD_HASH }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          ORCHESTRATOR_DATABASE_URL: ${{ secrets.ORCHESTRATOR_DATABASE_URL }}
+          NEXTAUTH_URL: https://loopader.vercel.app
+          NEXT_PUBLIC_APP_URL: https://loopader.vercel.app
+          ENGINE_SERVICE_URL: https://loopader-engine-xxxx.onrender.com
+          ORCHESTRATOR_URL: https://loopader-orchestrator-xxxx.onrender.com
+
+  # 2. Deploy to Vercel (Production)
+  deploy-vercel:
+    name: Deploy to Vercel
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm i -g vercel@latest
+
+      - name: Pull Vercel Environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project Artifacts
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Vercel
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+  # 3. Trigger Render Deploy (via deploy hook)
+  deploy-render:
+    name: Trigger Render Deploy
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render Engine Deploy
+        run: |
+          curl -X POST "${{ secrets.RENDER_ENGINE_DEPLOY_HOOK }}"
+      
+      - name: Trigger Render Orchestrator Deploy
+        run: |
+          curl -X POST "${{ secrets.RENDER_ORCHESTRATOR_DEPLOY_HOOK }}"
+      
+      - name: Trigger Render Database Deploy
+        run: |
+          curl -X POST "${{ secrets.RENDER_DB_DEPLOY_HOOK }}"
+
+  # 4. Notify (optional - add Slack/Discord webhook)
+  notify:
+    name: Notify Deployment
+    needs: [deploy-vercel, deploy-render]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deployment Status
+        run: |
+          echo "Deployment completed!"
+          echo "Vercel: https://loopader.vercel.app"
+          echo "Render Engine: https://loopader-engine.onrender.com"
+          echo "Render Orchestrator: https://loopader-orchestrator.onrender.com"
