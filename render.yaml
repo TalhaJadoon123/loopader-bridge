@@ -10,9 +10,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
-        valueFromDatabase:
-          name: loopader-db
-          property: connectionString
+        fromDatabase: loopader-db
   
   - type: web
     name: loopader-orchestrator
@@ -22,9 +20,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
-        valueFromDatabase:
-          name: loopader-db
-          property: connectionString
+        fromDatabase: loopader-db
       - key: ENGINE_SERVICE_URL
         value: https://loopader-engine.onrender.com
       - key: AI_RISK_API_URL
