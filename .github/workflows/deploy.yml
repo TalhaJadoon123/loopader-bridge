@@ -6,8 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  # Vercel secrets no longer needed in env (token-only deploy)
 
 jobs:
   # 1. Run tests & typecheck
@@ -54,7 +53,7 @@ jobs:
           ENGINE_SERVICE_URL: https://loopader-engine-xxxx.onrender.com
           ORCHESTRATOR_URL: https://loopader-orchestrator-xxxx.onrender.com
 
-  # 2. Deploy to Vercel (Production)
+  # 2. Deploy to Vercel (Production) - Token Only
   deploy-vercel:
     name: Deploy to Vercel
     needs: test
@@ -66,14 +65,10 @@ jobs:
       - name: Install Vercel CLI
         run: npm i -g vercel@latest
 
-      - name: Pull Vercel Environment
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Build Project Artifacts
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-
       - name: Deploy to Vercel
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} --scope=${{ secrets.VERCEL_ORG_ID }} --project=${{ secrets.VERCEL_PROJECT_ID }}
+        run: vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
   # 3. Trigger Render Deploy (via API token)
   deploy-render:
